@@ -1,0 +1,88 @@
+# ============================================================
+# 方案A 重训配置（postfilter 范式）
+# 改动：network.mask_ref = "iva" —— mask 作用于未压缩的 IVA 目标路（bp 后）
+# 与 config.yaml（原始 ivaiss_pow 训练）的唯一架构差异。
+# 从 ivaiss_pow epoch100 微调：特征提取器不变，仅 mask 作用域改变，
+# 用低 lr（1e-4）+ warmup/cosine，60 epoch，cl 2 epoch 快速过渡。
+# 注意 network.prior_ckpt 必须显式给（默认路径在已迁移的 ssd0 上不存在）。
+# ============================================================
+sample_rate: &sr 16000
+batch_size: &bs 16
+
+train_dataset:
+  md_file: "/home/nis/jizhe.lu/Code/metadata/DNS3/train.json"
+  wav_len: 4
+  drb: "50ms_rts"
+  fs: *sr
+  dummy: false
+  mode: 'train'
+
+train_dataloader:
+  batch_size: *bs
+  num_workers: 10
+  pin_memory: true
+  prefetch_factor: 4
+  shuffle: false
+
+val_dataset:
+  md_file: "/home/nis/jizhe.lu/Code/metadata/DNS3/val.json"
+  wav_len: 4
+  drb: "50ms_rts"
+  fs: *sr
+  dummy: false
+  mode: 'val'
+
+val_dataloader:
+  batch_size: 1
+  num_workers: 10
+  pin_memory: true
+  shuffle: false
+
+test_dataset:
+  md_file: "/home/nis/jizhe.lu/Code/metadata/DNS3/test.json"
+
+network:
+  num_channels: 32
+  mask_type: "mono"
+  mask_ref: "iva_dual"            # 方案A：mask 作用于未压缩 IVA 目标路；"raw" = 旧行为
+  mask2_gate_init: 0.0
+  prior_ckpt: "/data/ssd0/jizhe.lu/exps/dcgtcrn/checkpoints/model_epoch68.tar"  # teacher 先验网络
+  dereverberator:
+    name: "E2EpWPE_HA"
+    fs: *sr
+    channels: 2
+    n_fft: 512  # 等待修改鲁棒
+    batch_size: *bs
+    wpe:
+      class: "RLSWPE"
+      taps: 10
+      delay: 5
+      alpha: 0.99
+      eps_wpe: 0.001
+    dnn_wpe:
+      class: "LSTMNet"
+      ckpt: "/home/nis/jizhe.lu/Code/2sderev/WPENet.pt"
+      stats: "/home/nis/jizhe.lu/Code/2sderev/stats/reverberant/tr_{}_noiseless_reverberant_abs.pt"
+
+loss:
+  loss_func: "snr"
+  alpha: 0.25
+
+optimizer:
+  lr: .001                 # 从头训学习率（与 config.yaml 一致）；微调时用 .0001
+
+scheduler:
+  warmup_steps: 500
+  min_lr_ratio: 0.01
+
+pretrained:
+  ckpt: '/data/ssd0/jizhe.lu/exps/learningrate1/checkpoints/model_epoch27.tar'
+
+trainer:
+  epochs: 120
+  cl_epochs: 20             # 从头训用长课程（与 config.yaml 一致）；微调时用 2
+  save_checkpoint_interval: 1
+  log_interval: 20
+  clip_grad_norm_value: 3
+  resume: true
+  ckpt: "model_epoch27.tar"

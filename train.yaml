@@ -1,0 +1,192 @@
+# Training config
+# 用于记录redimnet原文的训练配置
+# ####################################################################################################
+# 训练集
+
+# (1). 宏博修正后的model31的训练数据
+train_scp: /mnt/dev/home/zhuhongbo/MAIN/speaker-verification/offline-speaker-verification/train_set/collection_spk_train_0612/outside_j09a_train.scp
+num_classes: 11683
+
+# ####################################################################################################
+# 测试集
+
+# 车外地上高噪/低噪 + 异性比对 + 车内注册(随机数组) 与 车外唤醒词 的正负例测试集
+test_scp: /mnt/dev/home/zhuhongbo/MAIN/speaker-verification/offline-speaker-verification/train_set/collection_spk_train/outside_j09a_valid.scp
+
+# ####################################################################################################
+
+# outputs
+exp_dir:
+
+# basic
+num_epoch: 60
+log_batch_freq: 100
+
+aug_prob: 0.8
+lr: 0.1
+min_lr: !!float 1e-5
+
+# dataloader
+batch_size: 32
+tr_max_ms: 2000  # 训练时最大音频长度
+test_max_ms: 1500  # 测试时音频的定长长度
+num_workers: 8
+
+# features
+is_int_sample: True  # 是否将音频读成INT
+fbank_dim: 72
+sr: 16000
+frame_len: 400  # sample，等于25ms
+frame_shift: 160  # sample, 等于10ms
+dither: 0
+energy_floor: 0
+mean_norm: False  # 提取特征后, 是否进行做均值归一化
+
+# model
+emb_size: 192
+pooling_func: SAPConv2D
+
+
+# feature_extractor:
+#   obj: process.processor.FBank
+#   args:
+#     n_mels: <fbank_dim>
+#     sr: <sr>
+#     frame_len: <frame_len>
+#     frame_shift: <frame_shift>
+#     dither: <dither>
+#     energy_floor: <energy_floor>
+#     mean_norm: <mean_norm>
+
+# ReDimnet的特征提取
+feature_extractor:
+  obj: models.redimnet.WrapFull.MelBanks
+  args:
+    n_mels: <fbank_dim>
+    win_length: <frame_len>
+    hop_length: <frame_shift>
+    do_spec_aug: False
+    freq_mask_width: (0, 6) 
+    time_mask_width: (0, 8)
+
+
+#augmentations:
+#  obj: process.processor.SpkVeriAug
+#  args:
+#    aug_prob: <aug_prob>
+#    noise_file: <noise>
+#    reverb_file: <reverb>
+
+preprocessor:
+  feature_extractor: <feature_extractor>
+
+epoch_counter:
+  obj: utils.epoch.EpochCounter
+  args:
+    limit: <num_epoch>
+
+tr_dataset:
+  obj: dataset.dataset.TrainDataset
+  args:
+    data_scp: <train_scp>
+    sr: <sr>
+    batch_size: <batch_size>
+    preprocessor: <preprocessor>
+    max_ms: <tr_max_ms>
+    is_int_sample: <is_int_sample>
+
+tr_dataloader:
+  obj: dataset.dataset.TrainLoader
+  args:
+    num_workers: <num_workers>
+
+test_dataset:
+  obj: dataset.dataset.TestDataset
+  args:
+    data_scp: <test_scp>
+    sr: <sr>
+    max_ms: <test_max_ms>
+    preprocessor: <preprocessor>
+
+test_dataloader:
+  obj: dataset.dataset.TestLoader
+  args:
+    num_workers: <num_workers>
+
+# embedding_model:
+#   obj: models.redimnet.WrapFull.ReDimNetWrap
+#   args:
+#     F: <fbank_dim>
+
+# b3
+embedding_model:
+  obj: models.redimnet.WrapFull.ReDimNetWrap
+  args:
+    C: 16
+    F: <fbank_dim>
+    block_1d_type: 'conv+att'
+    block_2d_type: 'basic_resnet_fwse'
+    embed_dim: 192
+    global_context_att: True
+    group_divisor: 1
+    # out_channels: None
+    stages_setup: [[1, 6, 4, [[3, 3]], 32], [2, 6, 2, [[3, 3]], 32], [1, 8, 2, [[3, 3]], 32], [2, 10, 2, [[3, 3]], 16], [1, 10, 1, [[3, 3]], 16], [2, 8, 1, [[3, 3]], 16]]
+    
+classifier:
+  obj: models.campplus.classifier.CosineClassifier
+  args:
+    input_dim: <emb_size>
+    out_neurons: <num_classes>
+
+optimizer:
+  obj: torch.optim.SGD
+  args:
+    params:
+    lr: <lr>
+    momentum: 0.9
+    nesterov: True
+    weight_decay: 0.00002
+
+
+lr_scheduler:
+  obj: process.scheduler.WarmupCosineScheduler
+  args:
+    optimizer: <optimizer>
+    min_lr: <min_lr>
+    max_lr: <lr>
+    warmup_epoch: 6
+    fix_epoch: <num_epoch>
+    step_per_epoch:
+
+# loss:
+#   obj: loss.projections.SphereFace2
+#   args:
+#     scale: 32.0
+#     margin_type: 'C'
+
+loss:
+  obj: loss.margin_loss.ArcMarginLoss
+  args:
+    scale: 32.0
+    margin: 0.3
+    easy_margin: False
+
+margin_scheduler:
+  obj: process.scheduler.MarginScheduler
+  args:
+    criterion: <loss>
+    initial_margin: 0.0
+    final_margin: 0.2
+    increase_start_epoch: 20
+    fix_epoch: 40
+    step_per_epoch:
+
+checkpointer:
+  obj: utils.checkpoint.Checkpointer
+  args:
+    checkpoints_dir: <exp_dir>/models
+    recoverables:
+      embedding_model: <embedding_model>
+      classifier: <classifier>
+      epoch_counter: <epoch_counter>
+

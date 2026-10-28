@@ -1,0 +1,88 @@
+sample_rate: &sr 16000
+batch_size: &bs 16
+
+train_dataset:
+  md_file: "/home/nis/jizhe.lu/Code/metadata/DNS3/train.json"
+  wav_len: 4
+  drb: "50ms_rts"
+  fs: *sr
+  dummy: false
+  mode: 'train'
+
+train_dataloader:
+  batch_size: *bs
+  num_workers: 10
+  pin_memory: true
+  prefetch_factor: 4
+  shuffle: false
+
+val_dataset:
+  md_file: "/home/nis/jizhe.lu/Code/metadata/DNS3/val.json"
+  wav_len: 4
+  drb: "50ms_rts"
+  fs: *sr
+  dummy: false
+  mode: 'val'
+
+val_dataloader:
+  batch_size: 1
+  num_workers: 10
+  pin_memory: true
+  shuffle: false
+
+test_dataset:
+  md_file: "/home/nis/jizhe.lu/Code/metadata/DNS3/test.json"
+
+network:
+  num_channels: 32
+  mask_type: "mono"
+  dereverberator:
+    name: "E2EpWPE_HA"
+    fs: *sr
+    channels: 2
+    n_fft: 512  # 等待修改鲁棒
+    batch_size: *bs
+    wpe:
+      class: "RLSWPE"
+      taps: 10
+      delay: 5
+      alpha: 0.99
+      eps_wpe: 0.001
+    dnn_wpe:
+      class: "LSTMNet"
+      ckpt: "/home/nis/jizhe.lu/Code/2sderev/WPENet.pt"
+      stats: "/home/nis/jizhe.lu/Code/2sderev/stats/reverberant/tr_{}_noiseless_reverberant_abs.pt"
+
+loss:
+  loss_func: "snr"
+  alpha: 0.25
+
+optimizer:
+  lr: .0001
+
+scheduler:
+  warmup_steps: 500       # 约半个 epoch 起步即可
+  min_lr_ratio: 0.01      # 末端 lr = 1e-6
+
+finetune:
+  bn_recalib_batches: 50  # warmup_steps 已移到 scheduler 段
+
+# scheduler:
+#   mode: "min"
+#   factor: 0.5
+#   patience: 3
+#   verbose: false
+
+pretrained:
+  ckpt: '/data/hdd0/jizhe.lu/exps/new_loss/checkpoints/model_epoch68.tar'
+
+trainer:
+  epochs: 30
+  cl_epochs: 2
+  save_checkpoint_interval: 1
+  log_interval: 5
+  clip_grad_norm_value: 3
+  resume: false
+  #exp_path: "/home/nis/jizhe.lu/Code/DNS3_2Mix_noisy_reverb/exps/derev"
+  ckpt: "model_epoch5.tar"
+

@@ -1,0 +1,35 @@
+# 权重与实验产物
+*.pt
+*.pth
+*.ckpt
+*.tar
+*.onnx
+.json
+.jsonls
+exps/
+runs/
+logs/
+tensorboard/
+output/
+eval/
+
+
+# 音频与数据
+*.wav
+*.flac
+sample/
+data/
+test_wavs/
+sample_test/
+iva_compare_out/
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# ===== 编辑器 / 系统 =====
+.vscode/
+.idea/
+.DS_Store
+*.swp

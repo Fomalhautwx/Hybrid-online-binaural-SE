@@ -1,0 +1,84 @@
+# ============================================================
+# 从 dual_mask_gradient_renew ep114 微调，改用 aligned 噪声先验
+# （AuxIVA_ISS_harmonic_v2.py 的 X0_prev 帧对齐，未提交改动）
+# 原训练是按 misaligned 噪声先验训的，这里用低 lr + cl 2 快速过渡微调。
+# ============================================================
+sample_rate: &sr 16000
+batch_size: &bs 16
+
+train_dataset:
+  md_file: "/home/nis/jizhe.lu/Code/metadata/DNS3/train.json"
+  wav_len: 4
+  drb: "50ms_rts"
+  fs: *sr
+  dummy: false
+  mode: 'train'
+
+train_dataloader:
+  batch_size: *bs
+  num_workers: 10
+  pin_memory: true
+  prefetch_factor: 4
+  shuffle: false
+
+val_dataset:
+  md_file: "/home/nis/jizhe.lu/Code/metadata/DNS3/val.json"
+  wav_len: 4
+  drb: "50ms_rts"
+  fs: *sr
+  dummy: false
+  mode: 'val'
+
+val_dataloader:
+  batch_size: 1
+  num_workers: 10
+  pin_memory: true
+  shuffle: false
+
+test_dataset:
+  md_file: "/home/nis/jizhe.lu/Code/metadata/DNS3/test.json"
+
+network:
+  num_channels: 32
+  mask_type: "mono"
+  mask_ref: "iva_dual"            # 双掩码
+  mask2_gate_init: 0.0            # 会被 ep114 里的 gate=0.44 覆盖
+  prior_ckpt: "/data/ssd0/jizhe.lu/exps/dcgtcrn/checkpoints/model_epoch68.tar"  # teacher 先验
+  dereverberator:
+    name: "E2EpWPE_HA"
+    fs: *sr
+    channels: 2
+    n_fft: 512
+    batch_size: *bs
+    wpe:
+      class: "RLSWPE"
+      taps: 10
+      delay: 5
+      alpha: 0.99
+      eps_wpe: 0.001
+    dnn_wpe:
+      class: "LSTMNet"
+      ckpt: "/home/nis/jizhe.lu/Code/2sderev/WPENet.pt"
+      stats: "/home/nis/jizhe.lu/Code/2sderev/stats/reverberant/tr_{}_noiseless_reverberant_abs.pt"
+
+loss:
+  loss_func: "snr"
+  alpha: 0.25
+
+optimizer:
+  lr: .0001                       # 微调低学习率
+
+scheduler:
+  warmup_steps: 500
+  min_lr_ratio: 0.01
+
+pretrained:
+  ckpt: '/data/ssd0/jizhe.lu/exps/dual_mask_gradient_renew/checkpoints/model_epoch114.tar'
+
+trainer:
+  epochs: 60                      # 微调用较少 epoch
+  cl_epochs: 2                    # 快速课程过渡
+  save_checkpoint_interval: 1
+  log_interval: 20
+  clip_grad_norm_value: 3
+  resume: false                   # 用 pretrained 加载权重，非 resume

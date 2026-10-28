@@ -1,0 +1,68 @@
+sample_rate: &sr 16000
+batch_size: &bs 32
+
+STFT:
+  frame_len: 512
+  frame_hop: 256
+  window: "hann"
+  nfft: 512
+
+train_dataset:
+  md_file: "/home/nis/jizhe.lu/Code/metadata/DNS3/train.json"
+  wav_len: 3
+  drb: "50ms_rts"
+  fs: *sr
+  dummy: false
+  mode: "train"
+
+train_dataloader:
+  batch_size: *bs
+  num_workers: 2
+  pin_memory: true
+  shuffle: false
+
+val_dataset:
+  md_file: "/home/nis/jizhe.lu/Code/metadata/DNS3/val.json"
+  wav_len: 6
+  drb: "50ms_rts"
+  fs: *sr
+  dummy: false
+  mode: "val"
+
+val_dataloader:
+  batch_size: 1
+  num_workers: 2
+  pin_memory: true
+  shuffle: false
+
+test_dataset:
+  md_file: "/home/nis/jizhe.lu/Code/metadata/DNS3/test.json"
+
+network:
+  num_channels: 32
+
+loss:
+  loss_func: "snr"
+  alpha: 0.25
+
+optimizer:
+  lr: .001
+
+scheduler:
+  mode: "min"
+  factor: 0.5
+  patience: 3
+  verbose: false
+
+pretrained:
+  #ckpt: "model_epoch47.tar"
+
+trainer:
+  epochs: 150
+  cl_epochs: 10
+  save_checkpoint_interval: 1
+  log_interval: 10
+  clip_grad_norm_value: 3
+  resume: false
+  ckpt: "model_epoch47.tar"
+
